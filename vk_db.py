@@ -1,6 +1,7 @@
 import sqlalchemy
+from data import db_name, db_password
 
-engine = sqlalchemy.create_engine('postgresql://LOGIN:PASSWORD@localhost:5432/vkinder')
+engine = sqlalchemy.create_engine(f'postgresql://{db_name}:{db_password}@localhost:5432/vkinder')
 connection = engine.connect()
 
 def start_db():

@@ -5,15 +5,17 @@ import requests
 import vk_api
 from vk_api.longpoll import VkLongPoll, VkEventType
 import vk_db
+from data import user_token as utoken, app_token as atoken
 
 
-user_token = 'USER TOKEN'
-token = 'TOKEN'
+user_token = utoken
+app_token = atoken
 
-vk = vk_api.VkApi(token=token)
+vk = vk_api.VkApi(token=app_token)
 longpoll = VkLongPoll(vk)
 
 vk_db.start_db()
+
 
 class VkUser:
     def __init__(self, user_id, bdate, sex, city, counter = 0):
@@ -56,7 +58,7 @@ for event in longpoll.listen():
             request = event.text
             user_id = event.user_id
 
-            finder_params = {'access_token': token, 'v': '5.131', 'user_ids': request, 'fields': 'city, sex, bdate'}
+            finder_params = {'access_token': app_token, 'v': '5.131', 'user_ids': request, 'fields': 'city, sex, bdate'}
 
             response = requests.get('https://api.vk.com/method/users.get', params=finder_params).json()
 
@@ -68,7 +70,7 @@ for event in longpoll.listen():
                             if event.to_me:
                                 request = event.text
                                 user_id = event.user_id
-                                finder_params = {'access_token': token, 'v': '5.131', 'user_ids': request, 'fields': 'city, sex, bdate'}
+                                finder_params = {'access_token': app_token, 'v': '5.131', 'user_ids': request, 'fields': 'city, sex, bdate'}
                                 response = requests.get('https://api.vk.com/method/users.get', params=finder_params).json()
                                 try:
                                     if response['response']:
@@ -111,7 +113,11 @@ for event in longpoll.listen():
                                 request = event.text
                                 user_id = event.user_id
                                 bdate = request.split('.')
-                                if bdate == [] or len(bdate) < 3 or not 0 < int(bdate[0]) <= 31 or not 0 < int(bdate[1]) <= 12 or not 1900 < int(bdate[2]) < datetime.today().year:
+                                if (bdate == [] or len(bdate) < 3
+                                or not (0 < int(bdate[0]) <= 31)
+                                or not (0 < int(bdate[1]) <= 12)
+                                or not (1900 < int(bdate[2]) < datetime.today().year)
+                                ):
                                     write_msg(user_id, 'Дата рождения указанна некорректно')
                                     write_msg(user_id, 'Укажите дату рождения в формате: дд.мм.гггг')
                                 else:
@@ -169,25 +175,30 @@ for event in longpoll.listen():
             user.counter += 1
             vk_db.update_counter(finder_id)
 
-            if search_response['response']['items'] == [] or search_response['response']['items'][0]['is_closed']:
-                while search_response['response']['items'] == [] or search_response['response']['items'][0]['is_closed']:
+            messege_sended = False
+
+            while messege_sended == False:
+                try:
+                    found_id = search_response["response"]["items"][0]["id"]
+                    photos = get_photo(found_id)
+
+                    write_msg(user_id, f'https://vk.com/id{found_id}')
+
+                    for photo in photos:
+                        send_attachment(user_id, found_id, photo[0])
+
+                    vk_db.add_new_found(finder_id, found_id)
+
+                    messege_sended = True
+
+                except KeyError:
                     search_params = {'access_token': user_token, 'v': '5.131', 'sort': 0,
-                                     'sex': 1 if user.sex == 2 else 2,
-                                     'count': 1, 'status': 6, 'age_from': user.age,
-                                     'age_to': user.age, 'offset': user.counter,
-                                     'has_photo': 1, 'city': user.city, 'fields': 'id',
-                                     'is_closed': 0}
+                                             'sex': 1 if user.sex == 2 else 2,
+                                             'count': 1, 'status': 6, 'age_from': user.age,
+                                             'age_to': user.age, 'offset': user.counter,
+                                             'has_photo': 1, 'city': user.city, 'fields': 'id',
+                                             'is_closed': 0}
                     search_response = requests.get('https://api.vk.com/method/users.search', params=search_params).json()
                     user.counter += 1
                     vk_db.update_counter(finder_id)
                     time.sleep(0.5)
-
-            found_id = search_response["response"]["items"][0]["id"]
-            write_msg(user_id, f'https://vk.com/id{found_id}')
-
-            photos = get_photo(found_id)
-
-            for photo in photos:
-                send_attachment(user_id, found_id, photo[0])
-
-            vk_db.add_new_found(finder_id, found_id)
